@@ -1,6 +1,6 @@
 {
-  "name": "wehavecursorathome",
-  "displayName": "WeHaveCursorAtHome",
+  "name": "cursorathome",
+  "displayName": "CursorAtHome",
   "description": "Like Cursor but self hosted and free and open source",
   "version": "0.0.1",
   "engines": {
@@ -10,17 +10,17 @@
     "Other"
   ],
   "activationEvents": [
-
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "wehavecursorathome.helloWorld",
+        "command": "cursorathome.helloWorld",
         "title": "Hello World"
       },
       {
-        "command": "wehavecursorathome.parseCurrentFile",
+        "command": "cursorathome.parseCurrentFile",
         "title": "parseCurrentFile"
       }
     ]

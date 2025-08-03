@@ -1,0 +1,79 @@
+Parse your code into an AST.
+
+Traverse the AST to identify logical boundaries like function definitions, class definitions, etc.
+
+Extract these code blocks as distinct chunks.
+
+Generate embeddings for these structurally coherent chunks.
+
+Store these embeddings and relevant metadata (like the type of code block, its name, file path) in a vector database.
+
+When you query, retrieve the most relevant AST-derived chunks and feed them as context to the LLM.
+
+Define Chunking Logic:
+
+    Traverse the AST: Once Tree-sitter gives you the AST (or CST), you'll write code that walks through this tree.
+
+    Identify Chunk Boundaries: Based on the type of AST node, you decide what constitutes a "chunk." For example, you might look for function_definition nodes, class_declaration nodes, etc.
+
+    Extract Code Content: For each identified chunk, you'll use the start and end byte/character positions provided by Tree-sitter nodes to extract the actual source code string for that chunk.
+
+    Handle Overlap/Recursion: You might implement logic for overlapping chunks or recursive splitting if a structural chunk is too large.
+
+Generate Embeddings:
+
+    Choose an Embedding Model: Tree-sitter does not generate embeddings. You need to select an external embedding model. This is typically a pre-trained neural network specifically designed to generate dense vector representations of text.
+
+        General-purpose text embedding models: (e.g., OpenAI's text-embedding-ada-002, Google's Gemini Embedding, Sentence Transformers like all-MiniLM-L6-v2) can work for code.
+
+        Code-specific embedding models: (e.g., CodeBERTa, GraphCodeBERT, or models fine-tuned on code) often perform better for code-related tasks as they are trained on vast codebases.
+
+    Feed Chunks to the Model: You take the extracted code strings (your chunks) and pass them to your chosen embedding model's API or local inference. The model then returns a vector (the embedding) for each chunk.
+
+Store and Index Embeddings:
+
+    Vector Database: You'll need a specialized database (like Pinecone, Chroma, Weaviate, Milvus, or even simpler libraries like FAISS) to store these embeddings efficiently. This database allows for fast "nearest neighbor" searches, which is how you find semantically similar code chunks.
+
+    Metadata: Along with the embedding, you'll store useful metadata for each chunk, such as:
+
+        The original file path
+
+        Line numbers (start and end)
+
+        The type of AST node (e.g., "function", "class")
+
+        The name of the function/class
+
+        Any relevant comments or docstrings associated with the chunk.
+
+Implement Retrieval Logic:
+
+    When a user asks a question, you generate an embedding for their query.
+
+    You then query your vector database using this query embedding to find the most similar code chunk embeddings.
+
+    The database returns the top N (e.g., 5-10) most relevant chunks (and their associated metadata).
+
+
+
+Parse the Code: Use tree-sitter bindings in your language (e.g., tree_sitter in Python) to parse your TypeScript code into a Tree object.
+
+Traverse the Tree: Write code to iterate over the Tree's nodes.
+
+Apply Chunking Logic:
+
+    Identify nodes that represent logical code units (e.g., function_declaration, class_declaration).
+
+    For each such node, extract its text (the actual code string) as a chunk.
+
+    Optionally, apply recursive splitting if a chunk is too large (e.g., if a function body exceeds a token limit, you might split it by top-level statements within the body).
+
+Extract Metadata (using Tree-sitter Queries):
+
+    For each chunk, use Tree-sitter's query engine to extract relevant identifiers (function name, class name, variable names) and type annotations (as text strings).
+
+    Also, extract the file_path, start_line, end_line (or byte offsets) from the node.
+
+Generate Embeddings: Send these extracted code strings (chunks) to your chosen embedding model.
+
+Store in Vector Database: Store the chunk's embedding vector along with its metadata (including the extracted names, types, file path, and line numbers) in your vector database.
