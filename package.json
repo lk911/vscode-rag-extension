@@ -48,9 +48,13 @@
     "ts-loader": "^9.5.2",
     "typescript": "^5.8.3",
     "webpack": "^5.99.7",
-    "webpack-cli": "^6.0.1"
+    "webpack-cli": "^6.0.1",
+    "webpack-node-externals": "^3.0.0"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.7.1",
+    "@xenova/transformers": "^2.17.2",
+    "onnxruntime-node": "^1.14.0",
     "tree-sitter-typescript": "^0.23.2",
     "web-tree-sitter": "^0.25.8"
   },

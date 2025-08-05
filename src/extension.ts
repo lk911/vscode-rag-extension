@@ -2,6 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { Parser, Language, Node,Query } from 'web-tree-sitter';
+import { initializeEmbeddingModel,getEmbedding } from './embedding';
 let parser: Parser | undefined;
 // const loadedLanguages: Map<string,Language> = new Map();
 const languageQueries: Map<string,Query> = new Map();
@@ -23,6 +24,13 @@ export async function activate(context: vscode.ExtensionContext) {
         // } catch (e) {
         //     console.error('Error reading tree-sitter.wasm:', e);
         // }
+		
+		initializeEmbeddingModel().then(() => {
+			console.log('Model initialized and ready!');
+			// Now you can safely register commands and use getEmbedding
+		}).catch(err => {
+			console.error('Failed to initialize the embedding model:', err);
+		});
 		await Parser.init({
 			locateFile: () => {
 				// This is where web-tree-sitter looks for its own core `tree-sitter.wasm` file.
@@ -55,6 +63,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					{
 						if(parser){
 							CreateTree(parser,query,context)
+
 						}
 						else {
 							vscode.window.showErrorMessage('Tree-sitter parser not initialized.');
@@ -144,6 +153,19 @@ async function CreateTree(parserparam: Parser,query:Query,context: vscode.Extens
 			}
 			console.log(`Found ${chunks.length} chunks:`, chunks);
 			vscode.window.showInformationMessage(`Found ${chunks.length} code chunks in ${langId} file.`);
+			let vectors: number[][]=[];
+			let x = 0;
+			for (const chunk of chunks){
+				const augmentedContent:string = `
+				File: ${chunk.filePath}
+				Function: ${chunk.name}
+				Code:
+				${chunk.content}
+				`;
+				vectors[x]=await getEmbedding(augmentedContent);
+				console.log(vectors[x]);
+				x++;
+			}
 		} else {
 			console.error('Parsing failed: tree object is null.');
 		}
@@ -153,52 +175,3 @@ async function CreateTree(parserparam: Parser,query:Query,context: vscode.Extens
     }
 	
 }
-// async function ChunkRetrieval(node: Node,chunks: CodeChunk[],fullText:string,langId:string){
-// 	let isChunkable = false;
-// 	let chunkType:string| undefined;
-// 	// --- LANGUAGE-SPECIFIC CHUNKING LOGIC ---
-//     if (langId === 'typescript' || langId === 'javascript') {
-//         if (node.type === 'function_declaration' || node.type === 'class_declaration' || node.type === 'interface_declaration') {
-//             isChunkable = true;
-//             chunkType = node.type === 'function_declaration' ? 'function' : (node.type === 'class_declaration' ? 'class' : 'interface');
-//         }
-//         // Add more TypeScript specific nodes
-//     } else if (langId === 'python') {
-//         if (node.type === 'function_definition' || node.type === 'class_definition') {
-//             isChunkable = true;
-//             chunkType = node.type === 'function_definition' ? 'function' : 'class';
-//         }
-//         // Add more Python specific nodes
-//     }
-//     // --- END LANGUAGE-SPECIFIC CHUNKING LOGIC ---
-
-//     if (isChunkable && chunkType) {
-//         const chunkContent = fullText.substring(node.startIndex, node.endIndex);
-//         const nameNode = node.childForFieldName('name'); // Common field for names in many grammars
-//         let name = nameNode ? nameNode.text : undefined;
-
-//         chunks.push({
-//             type: chunkType,
-//             name: name,
-//             content: chunkContent,
-//             startLine: node.startPosition.row,
-//             endLine: node.endPosition.row,
-//             startByte: node.startIndex,
-//             endByte: node.endIndex,
-//             filePath: vscode.window.activeTextEditor?.document.uri.fsPath || 'unknown',
-//             languageId: langId
-//         });
-//         // Important: If this node is a chunk, don't descend into its children
-//         // if you want to chunk at this level. If you want to, e.g., chunk methods
-//         // within classes, you'd recurse but then handle the inner chunks.
-//         return; // Don't recurse into children of a top-level chunk
-//     }
-
-//     // Recursively traverse children
-//     for (const child of node.children) {
-// 		if(child){
-//         ChunkRetrieval(child, chunks, fullText, langId);
-// 		}
-//     }
-
-// }

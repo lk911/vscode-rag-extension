@@ -1,7 +1,6 @@
+# Ignore development-only files and directories
 .vscode/**
 .vscode-test/**
-out/**
-node_modules/**
 src/**
 .gitignore
 .yarnrc
@@ -9,6 +8,15 @@ webpack.config.js
 vsc-extension-quickstart.md
 **/tsconfig.json
 **/eslint.config.mjs
+
+# Keep the build output and the node_modules directory
+# Remove or comment out these lines
+# out/**
+# node_modules/**
+# **/onnxruntime-node/**
+# **/sharp/**
+
+# Ignore the following build-related files
 **/*.map
 **/*.ts
 **/.vscode-test.*
