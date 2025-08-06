@@ -3,6 +3,7 @@
 import * as vscode from 'vscode';
 import { Parser, Language, Node,Query } from 'web-tree-sitter';
 import { initializeEmbeddingModel,getEmbedding } from './embedding';
+import { CodeChunk } from './codeChunk';
 let parser: Parser | undefined;
 // const loadedLanguages: Map<string,Language> = new Map();
 const languageQueries: Map<string,Query> = new Map();
@@ -88,19 +89,6 @@ export async function activate(context: vscode.ExtensionContext) {
 // This method is called when your extension is deactivated
 export function deactivate() {}
 
-
-//code chunk type 
-interface CodeChunk {
-    type: string; // e.g., 'function', 'class'
-    name?: string; // e.g., 'greet', 'MyClass
-    content: string; // The actual code string
-    startLine: number;
-    endLine: number;
-    startByte: number;
-    endByte: number;
-    filePath: string; 
-    languageId: string;
-}
 async function loadLangGrammar(context: vscode.ExtensionContext, langID:string, wasmFileName: string){
 }
 async function CreateTree(parserparam: Parser,query:Query,context: vscode.ExtensionContext){
@@ -154,7 +142,6 @@ async function CreateTree(parserparam: Parser,query:Query,context: vscode.Extens
 			console.log(`Found ${chunks.length} chunks:`, chunks);
 			vscode.window.showInformationMessage(`Found ${chunks.length} code chunks in ${langId} file.`);
 			let vectors: number[][]=[];
-			let x = 0;
 			for (const chunk of chunks){
 				const augmentedContent:string = `
 				File: ${chunk.filePath}
@@ -162,9 +149,8 @@ async function CreateTree(parserparam: Parser,query:Query,context: vscode.Extens
 				Code:
 				${chunk.content}
 				`;
-				vectors[x]=await getEmbedding(augmentedContent);
-				console.log(vectors[x]);
-				x++;
+				vectors.push(await getEmbedding(augmentedContent))
+				console.log(vectors[vectors.length-1]);
 			}
 		} else {
 			console.error('Parsing failed: tree object is null.');
