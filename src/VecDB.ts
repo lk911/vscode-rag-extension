@@ -1,16 +1,18 @@
 import VectorDB from '@themaximalist/vectordb.js';
 import { CodeChunk } from './codeChunk';
-const db = new VectorDB;
+import { language } from 'tree-sitter-javascript';
+const db = new VectorDB(
+    {
+        dimensions: 768
+    }
+);
 
 export async function AddtoDb(chunk:CodeChunk,vector:number[]){
     try{
-        db.add({
-            vec: vector,
-            code: chunk.content,
-            path: chunk.filePath,
-            name: chunk.name
-        })
+        const embedding = vector;
+
     }
+
     catch(e){
         console.log(e);
     }

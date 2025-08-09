@@ -141,16 +141,18 @@ async function CreateTree(parserparam: Parser,query:Query,context: vscode.Extens
 			}
 			console.log(`Found ${chunks.length} chunks:`, chunks);
 			vscode.window.showInformationMessage(`Found ${chunks.length} code chunks in ${langId} file.`);
-			let vectors: number[][]=[];
-			for (const chunk of chunks){
-				const augmentedContent:string = `
+			let vectors: Float32Array[] = [];
+			for (const chunk of chunks) {
+				const augmentedContent: string = `
 				File: ${chunk.filePath}
 				Function: ${chunk.name}
 				Code:
 				${chunk.content}
 				`;
-				vectors.push(await getEmbedding(augmentedContent))
+				const embedding = await getEmbedding(augmentedContent);
+				vectors.push(new Float32Array(embedding));
 				console.log(vectors[vectors.length-1]);
+				console.log(vectors[vectors.length-1].length);
 			}
 		} else {
 			console.error('Parsing failed: tree object is null.');

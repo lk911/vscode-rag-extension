@@ -1,14 +1,14 @@
 import { pipeline ,env} from '@xenova/transformers';
 
-delete env.backends.onnx.provider;
+//delete env.backends.onnx.provider;
 let extractor: any = null;
-
+env.allowRemoteModels = true;
 // This function loads the model only once.
 export async function initializeEmbeddingModel() {
     if (extractor === null) {
         if (extractor === null) {
             try {
-                extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+                extractor = await pipeline('feature-extraction', 'Xenova/bge-base-en-v1.5');
                 console.log('Embedding model loaded successfully.');
                 console.log('Backend info:', env.backends.onnx);
             } catch (e) {
@@ -33,6 +33,5 @@ export async function getEmbedding(text: string): Promise<number[]> {
     // The `data` property is a Float32Array.
     const embeddingVector = Array.from(output.data) as number[];
     
-    // For all-MiniLM-L6-v2, the embedding will be a 384-dimensional vector.
     return embeddingVector;
 }
