@@ -10,8 +10,8 @@ export class VectorDataBase{
         this.index = new HierarchicalNSW('cosine',this.dimensions);
         this.index.initIndex(this.numElements);
     }
-    add(vector:Float32Array){
-        this.index?.addPoint(Array.from(vector),this.currNum);
+    add(vector:Float32Array,id:number){
+        this.index?.addPoint(Array.from(vector),id);
         this.currNum++;
         this.savedVectors?.push(vector);
         if(this.currNum ===this.numElements){

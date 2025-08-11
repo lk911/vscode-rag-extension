@@ -1,9 +1,10 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
-import { Parser, Language, Node,Query } from 'web-tree-sitter';
+import { Parser, Language,Query } from 'web-tree-sitter';
 import { initializeEmbeddingModel,getEmbedding } from './embedding';
 import { CodeChunk } from './codeChunk';
+import { VectorDataBase } from './CustomVectorDB';
 let parser: Parser | undefined;
 // const loadedLanguages: Map<string,Language> = new Map();
 const languageQueries: Map<string,Query> = new Map();
@@ -11,6 +12,9 @@ const languageMap:{ [key:string]:string} = {
 	'typescript': 'tree-sitter-typescript.wasm',
 	'javsacript': 'tree-sitter-javascript.wasm'
 }
+//jinaai/jina-embeddings-v2-base-code embeds with 768 dimensions
+
+const vectorDb = new VectorDataBase(768);
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -19,23 +23,15 @@ export async function activate(context: vscode.ExtensionContext) {
 	try{
 		const wasmUri = vscode.Uri.joinPath(context.extensionUri, 'parsers', 'tree-sitter.wasm');
         console.log('Trying to read:', wasmUri.fsPath);
-        // try {
-        //     const wasmBytes = await vscode.workspace.fs.readFile(wasmUri);
-        //     console.log('Successfully read tree-sitter.wasm, bytes length:', wasmBytes.length);
-        // } catch (e) {
-        //     console.error('Error reading tree-sitter.wasm:', e);
-        // }
-		
-		initializeEmbeddingModel().then(() => {
-			console.log('Model initialized and ready!');
-			// Now you can safely register commands and use getEmbedding
-		}).catch(err => {
-			console.error('Failed to initialize the embedding model:', err);
-		});
+		try{
+			initializeEmbeddingModel();
+			console.log("embedding model loaded");
+		}
+		catch(e){
+			console.log(e);
+		}
 		await Parser.init({
 			locateFile: () => {
-				// This is where web-tree-sitter looks for its own core `tree-sitter.wasm` file.
-				// If you put `tree-sitter.wasm` in your `parsers` folder, this path is correct.
 				const wasmPath = vscode.Uri.joinPath(context.extensionUri, 'parsers', 'tree-sitter.wasm').fsPath;
 				console.log('tree-sitter.wasm path:', wasmPath);
 				
@@ -125,8 +121,6 @@ async function CreateTree(parserparam: Parser,query:Query,context: vscode.Extens
 					const nameNode = node.childForFieldName('name'); // Common field name
 					if (nameNode) name = nameNode.text;
 				}
-				// --- End name extraction ---
-
 				chunks.push({
 					type: chunkType,
 					name: name,
@@ -141,25 +135,30 @@ async function CreateTree(parserparam: Parser,query:Query,context: vscode.Extens
 			}
 			console.log(`Found ${chunks.length} chunks:`, chunks);
 			vscode.window.showInformationMessage(`Found ${chunks.length} code chunks in ${langId} file.`);
-			let vectors: Float32Array[] = [];
-			for (const chunk of chunks) {
-				const augmentedContent: string = `
-				File: ${chunk.filePath}
-				Function: ${chunk.name}
-				Code:
-				${chunk.content}
-				`;
-				const embedding = await getEmbedding(augmentedContent);
-				vectors.push(new Float32Array(embedding));
-				console.log(vectors[vectors.length-1]);
-				console.log(vectors[vectors.length-1].length);
-			}
+			EmbedAndStore(chunks);
 		} else {
 			console.error('Parsing failed: tree object is null.');
 		}
+
 	}
 	else {
         console.log('No active text editor found.');
     }
 	
+}
+async function EmbedAndStore(chunks:CodeChunk[]){
+	let vectors: Float32Array[] = [];
+	for (const chunk of chunks) {
+		const augmentedContent: string = `
+		File: ${chunk.filePath}
+		Function: ${chunk.name}
+		Code:
+		${chunk.content}
+		`;
+		console.log(augmentedContent);
+		const embedding = await getEmbedding(augmentedContent);
+		vectors.push(new Float32Array(embedding));
+		console.log(vectors[vectors.length-1]);
+		console.log(vectors[vectors.length-1].length);
+	}
 }
