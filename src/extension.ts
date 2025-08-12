@@ -12,6 +12,28 @@ const languageMap:{ [key:string]:string} = {
 	'typescript': 'tree-sitter-typescript.wasm',
 	'javsacript': 'tree-sitter-javascript.wasm'
 }
+export const testPrompts: string[] = [
+  "How do I add a new product to the catalog?",
+  "Show me how to update the stock of a product.",
+  "How can I delete a product by its ID?",
+  "How do I filter products by category and price?",
+  "How can I sort products by price in descending order?",
+  "How do I retrieve all products in the catalog?",
+  "How do I get a product by its unique ID?",
+  "What is the structure of a Product object?",
+  "What enums are defined for product categories?",
+  "How are filter options defined for products?",
+  "How is the ProductCatalog class implemented?",
+  "What is the purpose of the FilterOptions interface?",
+  "How are asynchronous operations handled in the catalog?",
+  "Show me an example of using async/await in this code.",
+  "How is the ProductCatalog class used in the main function?",
+  "How do I add a book to the catalog in the demo?",
+  "How is product deletion demonstrated in the main logic?",
+  "How does the code handle updating a product that doesn't exist?",
+  "How are products seeded with initial data?",
+  "How does the code ensure product IDs are unique?"
+];
 const chunkMap: Map<number,CodeChunk> = new Map();
 let chunkId = 0;
 //jinaai/jina-embeddings-v2-base-code embeds with 768 dimensions
@@ -24,7 +46,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	console.log('Extension "cursorathome" is starting activation...');
 	try{
 		const wasmUri = vscode.Uri.joinPath(context.extensionUri, 'parsers', 'tree-sitter.wasm');
-        console.log('Trying to read:', wasmUri.fsPath);
+        //console.log('Trying to read:', wasmUri.fsPath);
 		try{
 			initializeEmbeddingModel();
 			console.log("embedding model loaded");
@@ -35,7 +57,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		await Parser.init({
 			locateFile: () => {
 				const wasmPath = vscode.Uri.joinPath(context.extensionUri, 'parsers', 'tree-sitter.wasm').fsPath;
-				console.log('tree-sitter.wasm path:', wasmPath);
+				//console.log('tree-sitter.wasm path:', wasmPath);
 				
 				return wasmPath;
 			}
@@ -172,15 +194,34 @@ async function EmbedAndStore(chunks:CodeChunk[]){
 		Code:
 		${chunk.content}
 		`;
-		console.log(augmentedContent);
+		//console.log(augmentedContent);
 		const embedding = await getEmbedding(augmentedContent);
 		vectors.push(new Float32Array(embedding));
 		vectorDb.add(vectors[curr],chunk.id);
-		console.log(vectors[vectors.length-1]);
-		console.log(vectors[vectors.length-1].length);
+		//console.log(vectors[vectors.length-1]);
+		//console.log(vectors[vectors.length-1].length);
 	}
 	//add to vectordb
 	// for(const vector of vectors){
 	// 	vectorDb.add(vector,chunkId);
 	// }
+	embedPrompts();
+}
+async function embedPrompts(){
+	const promptVectors: Float32Array[] =[]
+	for(const prompt of testPrompts){
+		//console.log(prompt);
+		const embedding = await getEmbedding(prompt);
+		promptVectors.push(new Float32Array(embedding));
+		//console.log(promptVectors[promptVectors.length-1])
+	}
+	testSearch(promptVectors);
+}
+async function testSearch(promptVectors: Float32Array[]){
+	let curr = 0;
+	for(const prompt of promptVectors){
+		console.log("Prompt: ",testPrompts[curr]);
+		vectorDb.search(prompt,10);
+		curr++;
+	}
 }
