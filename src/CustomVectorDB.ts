@@ -30,8 +30,12 @@ export class VectorDataBase{
             this.index = newIndex;
         }    
     }
-    search(queryVector:Float32Array){
-        
+    search(queryVector:Float32Array,k:number){
+        const result = this.index?.searchKnn(Array.from(queryVector),k);
+        if (result) {
+            console.log('Labels:', result.neighbors);
+            console.log('Distances:', result.distances);
+        }
     }
 }
 

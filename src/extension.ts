@@ -12,6 +12,8 @@ const languageMap:{ [key:string]:string} = {
 	'typescript': 'tree-sitter-typescript.wasm',
 	'javsacript': 'tree-sitter-javascript.wasm'
 }
+const chunkMap: Map<number,CodeChunk> = new Map();
+let chunkId = 0;
 //jinaai/jina-embeddings-v2-base-code embeds with 768 dimensions
 
 const vectorDb = new VectorDataBase(768);
@@ -122,6 +124,7 @@ async function CreateTree(parserparam: Parser,query:Query,context: vscode.Extens
 					if (nameNode) name = nameNode.text;
 				}
 				chunks.push({
+					id: chunkId,
 					type: chunkType,
 					name: name,
 					content: chunkContent,
@@ -132,6 +135,19 @@ async function CreateTree(parserparam: Parser,query:Query,context: vscode.Extens
 					filePath: document.uri.fsPath,
 					languageId: langId
 				});
+				chunkMap.set(chunkId,{
+					id: chunkId,
+					type: chunkType,
+					name: name,
+					content: chunkContent,
+					startLine: node.startPosition.row,
+					endLine: node.endPosition.row,
+					startByte: node.startIndex,
+					endByte: node.endIndex,
+					filePath: document.uri.fsPath,
+					languageId: langId
+				})
+				chunkId++;
 			}
 			console.log(`Found ${chunks.length} chunks:`, chunks);
 			vscode.window.showInformationMessage(`Found ${chunks.length} code chunks in ${langId} file.`);
@@ -148,6 +164,7 @@ async function CreateTree(parserparam: Parser,query:Query,context: vscode.Extens
 }
 async function EmbedAndStore(chunks:CodeChunk[]){
 	let vectors: Float32Array[] = [];
+	let curr = 0;
 	for (const chunk of chunks) {
 		const augmentedContent: string = `
 		File: ${chunk.filePath}
@@ -158,7 +175,12 @@ async function EmbedAndStore(chunks:CodeChunk[]){
 		console.log(augmentedContent);
 		const embedding = await getEmbedding(augmentedContent);
 		vectors.push(new Float32Array(embedding));
+		vectorDb.add(vectors[curr],chunk.id);
 		console.log(vectors[vectors.length-1]);
 		console.log(vectors[vectors.length-1].length);
 	}
+	//add to vectordb
+	// for(const vector of vectors){
+	// 	vectorDb.add(vector,chunkId);
+	// }
 }
