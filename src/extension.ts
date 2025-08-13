@@ -198,6 +198,7 @@ async function EmbedAndStore(chunks:CodeChunk[]){
 		const embedding = await getEmbedding(augmentedContent);
 		vectors.push(new Float32Array(embedding));
 		vectorDb.add(vectors[curr],chunk.id);
+		curr++;
 		//console.log(vectors[vectors.length-1]);
 		//console.log(vectors[vectors.length-1].length);
 	}
@@ -210,10 +211,10 @@ async function EmbedAndStore(chunks:CodeChunk[]){
 async function embedPrompts(){
 	const promptVectors: Float32Array[] =[]
 	for(const prompt of testPrompts){
-		//console.log(prompt);
+		console.log(prompt);
 		const embedding = await getEmbedding(prompt);
 		promptVectors.push(new Float32Array(embedding));
-		//console.log(promptVectors[promptVectors.length-1])
+		console.log(promptVectors[promptVectors.length-1])
 	}
 	testSearch(promptVectors);
 }
