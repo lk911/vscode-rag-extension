@@ -8,10 +8,25 @@ import { VectorDataBase } from './CustomVectorDB';
 let parser: Parser | undefined;
 // const loadedLanguages: Map<string,Language> = new Map();
 const languageQueries: Map<string,Query> = new Map();
-const languageMap:{ [key:string]:string} = {
-	'typescript': 'tree-sitter-typescript.wasm',
-	'javsacript': 'tree-sitter-javascript.wasm'
-}
+const languageMap: { [key: string]: string } = {
+  'typescript': 'tree-sitter-typescript.wasm',
+  'javascript': 'tree-sitter-javascript.wasm',
+  'python': 'tree-sitter-python.wasm',
+  'java': 'tree-sitter-java.wasm',
+  'c': 'tree-sitter-c.wasm',
+  'cpp': 'tree-sitter-cpp.wasm',
+  'csharp': 'tree-sitter-c-sharp.wasm',
+  'php': 'tree-sitter-php.wasm',
+  'go': 'tree-sitter-go.wasm',
+  'swift': 'tree-sitter-swift.wasm',
+  'kotlin': 'tree-sitter-kotlin.wasm',
+  'rust': 'tree-sitter-rust.wasm',
+  'ruby': 'tree-sitter-ruby.wasm',
+  'html': 'tree-sitter-html.wasm',
+  'css': 'tree-sitter-css.wasm',
+  'bash': 'tree-sitter-bash.wasm',
+  'json': 'tree-sitter-json.wasm'
+};
 export const testPrompts: string[] = [
   "How do I add a new product to the catalog?",
   "Show me how to update the stock of a product.",
@@ -80,18 +95,25 @@ export async function activate(context: vscode.ExtensionContext) {
 				const disposable = vscode.commands.registerCommand('cursorathome.helloWorld', () => {
 					vscode.window.showInformationMessage('Hello World from CursorAtHome!');
 				});
-				const viewParse = vscode.commands.registerCommand('cursorathome.parseCurrentFile', () =>
-					{
-						if(parser){
-							CreateTree(parser,query,context)
+				const viewParse = vscode.commands.registerCommand('cursorathome.parseCurrentFile', () =>{
+					if(parser){
+						CreateTree(parser,query,context)
 
-						}
-						else {
-							vscode.window.showErrorMessage('Tree-sitter parser not initialized.');
+					}
+					else {
+						vscode.window.showErrorMessage('Tree-sitter parser not initialized.');
+					}
+				});
+				const inputBox = vscode.commands.registerCommand('cursorathome.showinputbox', () => {
+					vscode.window.showInputBox({ prompt: 'Enter your prompt:' }).then(value => {
+						if (value) {
+							vscode.window.showInformationMessage(`You entered: ${value}`);
 						}
 					});
+				})
 				context.subscriptions.push(disposable);
 				context.subscriptions.push(viewParse);
+				context.subscriptions.push(inputBox);
 			}
 			catch(e){
 				console.error("Error setting up parser language:",e);
@@ -127,22 +149,18 @@ async function CreateTree(parserparam: Parser,query:Query,context: vscode.Extens
 			const chunks:CodeChunk[] = [];	
 			for (const match of matches) {
 				const node = match.node;
-				const captureName = match.name; // e.g., 'chunk.function', 'chunk.class'
+				const captureName = match.name; 
 
-				// You can derive chunk type from captureName (e.g., 'function', 'class')
 				const chunkType = captureName.split('.')[1];
 
 				const chunkContent = documentText.substring(node.startIndex, node.endIndex);
 
-				// --- Extract name using another query or direct child lookup ---
 				let name: string | undefined;
-				// If you define specific name queries like (function_declaration name: (identifier) @name)
 				const nameCapture = query.captures(node).find(c => c.name === 'name');
 				if (nameCapture) {
 					name = nameCapture.node.text;
 				} else {
-					// Fallback for languages where 'name' isn't a direct field or no query exists
-					const nameNode = node.childForFieldName('name'); // Common field name
+					const nameNode = node.childForFieldName('name'); 
 					if (nameNode) name = nameNode.text;
 				}
 				chunks.push({
