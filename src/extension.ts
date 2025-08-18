@@ -7,7 +7,7 @@ import { CodeChunk } from './codeChunk';
 import { VectorDataBase } from './CustomVectorDB';
 let parser: Parser | undefined;
 // const loadedLanguages: Map<string,Language> = new Map();
-const languageQueries: Map<string,Query> = new Map();
+const languageQueries: {[key: string]: Query } = {};
 const languageMap: { [key: string]: string } = {
   'typescript': 'tree-sitter-typescript.wasm',
   'javascript': 'tree-sitter-javascript.wasm',
@@ -15,17 +15,34 @@ const languageMap: { [key: string]: string } = {
   'java': 'tree-sitter-java.wasm',
   'c': 'tree-sitter-c.wasm',
   'cpp': 'tree-sitter-cpp.wasm',
-  'csharp': 'tree-sitter-c-sharp.wasm',
+  'csharp': 'tree-sitter-c_sharp.wasm',
   'php': 'tree-sitter-php.wasm',
   'go': 'tree-sitter-go.wasm',
   'swift': 'tree-sitter-swift.wasm',
-  'kotlin': 'tree-sitter-kotlin.wasm',
   'rust': 'tree-sitter-rust.wasm',
   'ruby': 'tree-sitter-ruby.wasm',
   'html': 'tree-sitter-html.wasm',
   'css': 'tree-sitter-css.wasm',
   'bash': 'tree-sitter-bash.wasm',
   'json': 'tree-sitter-json.wasm'
+};
+const treeSitterQueries:{ [key: string]: string } = {
+  'typescript': 'typescript.scm',
+  'javascript': 'javascript.scm',
+  'python': 'python.scm',
+  'java': 'java.scm',
+  'c': 'c.scm',
+  'cpp': 'cpp.scm',
+  'csharp': 'csharp.scm',
+  'php': 'php.scm',
+  'go': 'go.scm',
+  'swift': 'swift.scm',
+  'rust': 'rust.scm',
+  'ruby': 'ruby.scm',
+  'html': 'html.scm',//file needed still
+  'css': 'css.scm',//file needed still
+  'bash': 'bash.scm',//file needed still
+  'json': 'json.scm' //file needed still
 };
 export const testPrompts: string[] = [
   "How do I add a new product to the catalog?",
@@ -52,7 +69,6 @@ export const testPrompts: string[] = [
 const chunkMap: Map<number,CodeChunk> = new Map();
 let chunkId = 0;
 //jinaai/jina-embeddings-v2-base-code embeds with 768 dimensions
-
 const vectorDb = new VectorDataBase(768);
 
 // This method is called when your extension is activated
@@ -63,7 +79,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		const wasmUri = vscode.Uri.joinPath(context.extensionUri, 'parsers', 'tree-sitter.wasm');
         //console.log('Trying to read:', wasmUri.fsPath);
 		try{
-			initializeEmbeddingModel();
+			await initializeEmbeddingModel();
 			console.log("embedding model loaded");
 		}
 		catch(e){
@@ -81,15 +97,16 @@ export async function activate(context: vscode.ExtensionContext) {
 		//load language and query 
 		if(parser){
 			try{
-				const parserLangUri = vscode.Uri.joinPath(context.extensionUri,'parsers',languageMap['typescript']);
-				const wasmBytes = await vscode.workspace.fs.readFile(parserLangUri);
-				const loadLang = await Language.load(wasmBytes)
-				const queryUri = vscode.Uri.joinPath(context.extensionUri, 'TreeQueries', 'typescript.scm');
-				const queryContent = await vscode.workspace.fs.readFile(queryUri);
-				const queryString = new TextDecoder().decode(queryContent);
-				const query = new Query(loadLang,queryString)
-				//const matches = query.captures(rootNode); 
-				parser.setLanguage(loadLang)
+				// const parserLangUri = vscode.Uri.joinPath(context.extensionUri,'parsers',languageMap['typescript']);
+				// const wasmBytes = await vscode.workspace.fs.readFile(parserLangUri);
+				// const loadLang = await Language.load(wasmBytes)
+				// const queryUri = vscode.Uri.joinPath(context.extensionUri, 'TreeQueries', 'typescript.scm');
+				// const queryContent = await vscode.workspace.fs.readFile(queryUri);
+				// const queryString = new TextDecoder().decode(queryContent);
+				// const query = new Query(loadLang,queryString)
+				// //const matches = query.captures(rootNode); 
+				// parser.setLanguage(loadLang)
+				indexProject(parser,context);
 				console.log('Congratulations, your extension "cursorathome" is now active!');
 				//define commands
 				const disposable = vscode.commands.registerCommand('cursorathome.helloWorld', () => {
@@ -97,7 +114,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				});
 				const viewParse = vscode.commands.registerCommand('cursorathome.parseCurrentFile', () =>{
 					if(parser){
-						CreateTree(parser,query,context)
+						//CreateTree(parser,query)
 
 					}
 					else {
@@ -130,21 +147,80 @@ export async function activate(context: vscode.ExtensionContext) {
 
 // This method is called when your extension is deactivated
 export function deactivate() {}
-
-async function loadLangGrammar(context: vscode.ExtensionContext, langID:string, wasmFileName: string){
+async function indexProject(parser: Parser,context: vscode.ExtensionContext){
+	const folders = vscode.workspace.workspaceFolders;
+	if (!folders) {
+		vscode.window.showInformationMessage("No project is open.");
+		return;
+	}	
+	if(folders){
+		const rootPath = folders[0].uri.fsPath;
+		console.log("workspace root:",rootPath);
+		for (const folder of folders) {
+			console.log("Workspace root:", folder.uri.fsPath);
+			await listFiles(folder.uri,parser,context);
+		}
+	}
 }
-async function CreateTree(parserparam: Parser,query:Query,context: vscode.ExtensionContext){
+async function listFiles(uri: vscode.Uri,parser: Parser,context: vscode.ExtensionContext) {
+    const entries = await vscode.workspace.fs.readDirectory(uri);
+
+    for (const [name, type] of entries) {
+        console.log("Found:", name, "Type:", type === vscode.FileType.Directory ? "folder" : "file");
+		const fileUri = vscode.Uri.joinPath(uri, name);
+		
+        if (type === vscode.FileType.Directory) {
+            // Recursively go deeper 
+            await listFiles(vscode.Uri.joinPath(uri, name),parser,context);
+        }
+		else{
+			const fileText = await readFile(fileUri);
+			console.log("File URI:", fileUri.toString());
+			const doc = await vscode.workspace.openTextDocument(fileUri);
+			console.log('Language ID:', doc.languageId);
+			if(doc.languageId in languageMap){
+				const parserLangUri = vscode.Uri.joinPath(context.extensionUri,'parsers',languageMap[doc.languageId]);
+				const wasmBytes = await vscode.workspace.fs.readFile(parserLangUri);
+				const loadLang = await Language.load(wasmBytes);
+				parser.setLanguage(loadLang)
+				let query:Query;
+				if(doc.languageId in languageQueries){
+					query = languageQueries[doc.languageId];
+				}
+				else
+				{	
+					const queryUri = vscode.Uri.joinPath(context.extensionUri, 'TreeQueries', treeSitterQueries[doc.languageId]);
+					const queryContent = await vscode.workspace.fs.readFile(queryUri);
+					const queryString = new TextDecoder().decode(queryContent);
+					query = new Query(loadLang,queryString);
+					languageQueries[doc.languageId]= query;
+				}
+				CreateTree(parser,query,fileText);
+			}
+			else{
+				console.log("unsupported language: ",doc.languageId);
+			}
+		}
+    }
+}
+async function readFile(uri: vscode.Uri): Promise<string> {
+    const doc = await vscode.workspace.openTextDocument(uri);
+	const docText = doc.getText();
+    //console.log(doc.getText()); 
+	return docText;
+}
+async function CreateTree(parserparam: Parser,query:Query,fileText:string){
 	const editor = vscode.window.activeTextEditor;
 	if(editor){
 		const document = editor.document;
-		const documentText = document.getText();
-		const tree = parserparam.parse(documentText);
+		// const documentText = document.getText();
+		const tree = parserparam.parse(fileText);
 		if (tree) { 
 			const matches = query.captures(tree.rootNode);
 			const contentString = tree.rootNode.toString();
 			const contentBytes = new TextEncoder().encode(contentString);
-			console.log('Parsed active document:', contentString);
-			await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(context.extensionUri,'src','tree'),contentBytes);
+			//console.log('Parsed active document:', contentString);
+			//await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(context.extensionUri,'src','tree'),contentBytes);
 			var langId = document.languageId;
 			const chunks:CodeChunk[] = [];	
 			for (const match of matches) {
@@ -153,7 +229,7 @@ async function CreateTree(parserparam: Parser,query:Query,context: vscode.Extens
 
 				const chunkType = captureName.split('.')[1];
 
-				const chunkContent = documentText.substring(node.startIndex, node.endIndex);
+				const chunkContent = fileText.substring(node.startIndex, node.endIndex);
 
 				let name: string | undefined;
 				const nameCapture = query.captures(node).find(c => c.name === 'name');
