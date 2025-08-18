@@ -2,7 +2,7 @@
 
 A powerful VS Code extension that provides **RAG (Retrieval-Augmented Generation) capabilities** for code assistance using **local LLMs** and **self-hosted infrastructure**. Like Cursor and Copilot but completely free, open source, and running on your own machine.
 
-## 🚀 Features
+## Features
 
 ### **RAG-Powered Code Understanding**
 - **Semantic Code Search**: Find relevant code snippets using natural language queries
@@ -27,8 +27,6 @@ A powerful VS Code extension that provides **RAG (Retrieval-Augmented Generation
 ## 📋 Requirements
 
 ### **System Requirements**
-- VS Code 1.102.0 or higher
-- Node.js 20.x or higher
 - Sufficient RAM for local AI models (recommended: 8GB+)
 
 ### **Dependencies**
@@ -38,7 +36,7 @@ The extension automatically handles all required dependencies:
 - **HNSW**: For efficient vector similarity search
 - **Transformers.js**: For local embedding generation
 
-## 🔧 Installation
+## Installation
 
 1. **Clone the repository**:
    ```bash
@@ -61,14 +59,8 @@ The extension automatically handles all required dependencies:
    - Type "Extensions: Install from VSIX"
    - Select the built `.vsix` file from the `dist` folder
 
-## 🎯 Usage
+## Usage
 
-### **Basic Commands**
-
-The extension provides several commands accessible via the Command Palette (`Ctrl+Shift+P`):
-
-- **`cursorathome.parseCurrentFile`**: Parse and index the currently open file
-- **`cursorathome.showinputbox`**: Interactive input for code queries
 
 
 
