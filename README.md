@@ -24,7 +24,7 @@ A powerful VS Code extension that provides **RAG (Retrieval-Augmented Generation
 - **Smart Suggestions**: Context-aware code recommendations based on your codebase
 
 
-## 📋 Requirements
+## Requirements
 
 ### **System Requirements**
 - Sufficient RAM for local AI models (recommended: 8GB+)
@@ -64,6 +64,6 @@ The extension automatically handles all required dependencies:
 
 
 
-## ⚙️ Configuration
+## Configuration
 
 ### **Extension Settings**
