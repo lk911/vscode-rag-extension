@@ -8,6 +8,7 @@ import { VectorDataBase } from './CustomVectorDB';
 let parser: Parser | undefined;
 // const loadedLanguages: Map<string,Language> = new Map();
 const languageQueries: {[key: string]: Query } = {};
+const filePathIds: {[key:string]:number[]} = {};
 const languageMap: { [key: string]: string } = {
   'typescript': 'tree-sitter-typescript.wasm',
   'javascript': 'tree-sitter-javascript.wasm',
@@ -77,7 +78,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	console.log('Extension "cursorathome" is starting activation...');
 	try{
 		const wasmUri = vscode.Uri.joinPath(context.extensionUri, 'parsers', 'tree-sitter.wasm');
-        //console.log('Trying to read:', wasmUri.fsPath);
 		try{
 			await initializeEmbeddingModel();
 			console.log("embedding model loaded");
@@ -87,38 +87,23 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 		await Parser.init({
 			locateFile: () => {
-				const wasmPath = vscode.Uri.joinPath(context.extensionUri, 'parsers', 'tree-sitter.wasm').fsPath;
-				//console.log('tree-sitter.wasm path:', wasmPath);
-				
+				const wasmPath = vscode.Uri.joinPath(context.extensionUri, 'parsers', 'tree-sitter.wasm').fsPath;			
 				return wasmPath;
 			}
 		});
 		parser= new Parser();
-		//load language and query 
 		if(parser){
 			try{
-				// const parserLangUri = vscode.Uri.joinPath(context.extensionUri,'parsers',languageMap['typescript']);
-				// const wasmBytes = await vscode.workspace.fs.readFile(parserLangUri);
-				// const loadLang = await Language.load(wasmBytes)
-				// const queryUri = vscode.Uri.joinPath(context.extensionUri, 'TreeQueries', 'typescript.scm');
-				// const queryContent = await vscode.workspace.fs.readFile(queryUri);
-				// const queryString = new TextDecoder().decode(queryContent);
-				// const query = new Query(loadLang,queryString)
-				// //const matches = query.captures(rootNode); 
-				// parser.setLanguage(loadLang)
 				indexProject(parser,context);
 				console.log('Congratulations, your extension "cursorathome" is now active!');
-				//define commands
 				const disposable = vscode.commands.registerCommand('cursorathome.helloWorld', () => {
 					vscode.window.showInformationMessage('Hello World from CursorAtHome!');
 				});
-				const viewParse = vscode.commands.registerCommand('cursorathome.parseCurrentFile', () =>{
-					if(parser){
-						//CreateTree(parser,query)
-
-					}
-					else {
-						vscode.window.showErrorMessage('Tree-sitter parser not initialized.');
+				vscode.workspace.onDidSaveTextDocument(async (document: vscode.TextDocument) => {
+					if (document.languageId === 'typescript' || document.languageId === 'javascript') {
+						//await handleFileUpdate(document);
+						if(parser){
+						await updateIndex(document,parser,context);}
 					}
 				});
 				const inputBox = vscode.commands.registerCommand('cursorathome.showinputbox', () => {
@@ -129,7 +114,6 @@ export async function activate(context: vscode.ExtensionContext) {
 					});
 				})
 				context.subscriptions.push(disposable);
-				context.subscriptions.push(viewParse);
 				context.subscriptions.push(inputBox);
 			}
 			catch(e){
@@ -195,7 +179,12 @@ async function listFiles(uri: vscode.Uri,parser: Parser,context: vscode.Extensio
 					query = new Query(loadLang,queryString);
 					languageQueries[doc.languageId]= query;
 				}
-				CreateTree(parser,query,fileText);
+				const chunks =await CreateTree(parser,query,fileText,doc);
+				if(chunks){
+				EmbedAndStore(chunks);}
+				else{
+					console.error("chunking failed")
+				}
 			}
 			else{
 				console.log("unsupported language: ",doc.languageId);
@@ -209,73 +198,70 @@ async function readFile(uri: vscode.Uri): Promise<string> {
     //console.log(doc.getText()); 
 	return docText;
 }
-async function CreateTree(parserparam: Parser,query:Query,fileText:string){
-	const editor = vscode.window.activeTextEditor;
-	if(editor){
-		const document = editor.document;
-		// const documentText = document.getText();
-		const tree = parserparam.parse(fileText);
-		if (tree) { 
-			const matches = query.captures(tree.rootNode);
-			const contentString = tree.rootNode.toString();
-			const contentBytes = new TextEncoder().encode(contentString);
-			//console.log('Parsed active document:', contentString);
-			//await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(context.extensionUri,'src','tree'),contentBytes);
-			var langId = document.languageId;
-			const chunks:CodeChunk[] = [];	
-			for (const match of matches) {
-				const node = match.node;
-				const captureName = match.name; 
-
-				const chunkType = captureName.split('.')[1];
-
-				const chunkContent = fileText.substring(node.startIndex, node.endIndex);
-
-				let name: string | undefined;
-				const nameCapture = query.captures(node).find(c => c.name === 'name');
-				if (nameCapture) {
-					name = nameCapture.node.text;
-				} else {
-					const nameNode = node.childForFieldName('name'); 
-					if (nameNode) name = nameNode.text;
-				}
-				chunks.push({
-					id: chunkId,
-					type: chunkType,
-					name: name,
-					content: chunkContent,
-					startLine: node.startPosition.row,
-					endLine: node.endPosition.row,
-					startByte: node.startIndex,
-					endByte: node.endIndex,
-					filePath: document.uri.fsPath,
-					languageId: langId
-				});
-				chunkMap.set(chunkId,{
-					id: chunkId,
-					type: chunkType,
-					name: name,
-					content: chunkContent,
-					startLine: node.startPosition.row,
-					endLine: node.endPosition.row,
-					startByte: node.startIndex,
-					endByte: node.endIndex,
-					filePath: document.uri.fsPath,
-					languageId: langId
-				})
-				chunkId++;
+async function CreateTree(parserparam: Parser,query:Query,fileText:string,document: vscode.TextDocument): Promise<CodeChunk[]|undefined>{
+	// const documentText = document.getText();
+	const tree = parserparam.parse(fileText);
+	if (tree) { 
+		const matches = query.captures(tree.rootNode);
+		const contentString = tree.rootNode.toString();
+		const contentBytes = new TextEncoder().encode(contentString);
+		//console.log('Parsed active document:', contentString);
+		//await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(context.extensionUri,'src','tree'),contentBytes);
+		var langId = document.languageId;
+		const chunks:CodeChunk[] = [];	
+		for (const match of matches) {
+			const node = match.node;
+			const captureName = match.name; 
+			const chunkType = captureName.split('.')[1];
+			const chunkContent = fileText.substring(node.startIndex, node.endIndex);
+			let name: string | undefined;
+			const nameCapture = query.captures(node).find(c => c.name === 'name');
+			if (nameCapture) {
+				name = nameCapture.node.text;
+			} else {
+				const nameNode = node.childForFieldName('name'); 
+				if (nameNode) name = nameNode.text;
 			}
-			console.log(`Found ${chunks.length} chunks:`, chunks);
-			vscode.window.showInformationMessage(`Found ${chunks.length} code chunks in ${langId} file.`);
-			EmbedAndStore(chunks);
-		} else {
-			console.error('Parsing failed: tree object is null.');
+			chunks.push({
+				id: chunkId,
+				type: chunkType,
+				name: name,
+				content: chunkContent,
+				startLine: node.startPosition.row,
+				endLine: node.endPosition.row,
+				startByte: node.startIndex,
+				endByte: node.endIndex,
+				filePath: document.uri.fsPath,
+				languageId: langId
+			});
+			// console.log(chunkId);
+			// console.log(chunkContent);
+			chunkMap.set(chunkId,{
+				id: chunkId,
+				type: chunkType,
+				name: name,
+				content: chunkContent,
+				startLine: node.startPosition.row,
+				endLine: node.endPosition.row,
+				startByte: node.startIndex,
+				endByte: node.endIndex,
+				filePath: document.uri.fsPath,
+				languageId: langId
+			});
+			if(!filePathIds[document.uri.fsPath]){
+				filePathIds[document.uri.fsPath]= [];
+			}
+			console.log(chunkId);
+			filePathIds[document.uri.fsPath].push(chunkId);
+			chunkId++;
 		}
-
+		console.log(`Found ${chunks.length} chunks:`, chunks);
+		vscode.window.showInformationMessage(`Found ${chunks.length} code chunks in ${langId} file.`);
+		return chunks;
+	} else {
+		console.error('Parsing failed: tree object is null.');
+		return undefined;
 	}
-	else {
-        console.log('No active text editor found.');
-    }
 	
 }
 async function EmbedAndStore(chunks:CodeChunk[]){
@@ -296,10 +282,6 @@ async function EmbedAndStore(chunks:CodeChunk[]){
 		//console.log(vectors[vectors.length-1]);
 		//console.log(vectors[vectors.length-1].length);
 	}
-	//add to vectordb
-	// for(const vector of vectors){
-	// 	vectorDb.add(vector,chunkId);
-	// }
 	embedPrompts();
 }
 async function embedPrompts(){
@@ -318,5 +300,45 @@ async function testSearch(promptVectors: Float32Array[]){
 		console.log("Prompt: ",testPrompts[curr]);
 		vectorDb.search(prompt,10);
 		curr++;
+	}
+}
+//update index when save occurs
+async function updateIndex(doc: vscode.TextDocument,parser:Parser,context: vscode.ExtensionContext){
+	if(doc.languageId in languageMap){
+		const fileText = doc.getText();
+		const parserLangUri = vscode.Uri.joinPath(context.extensionUri,'parsers',languageMap[doc.languageId]);
+		const wasmBytes = await vscode.workspace.fs.readFile(parserLangUri);
+		const loadLang = await Language.load(wasmBytes);
+		parser.setLanguage(loadLang)
+		let query:Query;
+		if(doc.languageId in languageQueries){
+			query = languageQueries[doc.languageId];
+		}
+		else
+		{	
+			const queryUri = vscode.Uri.joinPath(context.extensionUri, 'TreeQueries', treeSitterQueries[doc.languageId]);
+			const queryContent = await vscode.workspace.fs.readFile(queryUri);
+			const queryString = new TextDecoder().decode(queryContent);
+			query = new Query(loadLang,queryString);
+			languageQueries[doc.languageId]= query;
+		}
+		const chunks =await CreateTree(parser,query,fileText,doc);
+		if(chunks){
+			if(filePathIds[chunks[0].filePath]){
+				for(const id of filePathIds[chunks[0].filePath]){
+					console.log("hello1");
+					console.log(id);
+					vectorDb.delete(id);
+				}
+			}
+			filePathIds[chunks[0].filePath] = [];
+			for(const chunk of chunks){
+				filePathIds[chunks[0].filePath].push(chunk.id);
+			}
+			EmbedAndStore(chunks);
+		}
+		else{
+			console.error("chunking failed")
+		}
 	}
 }

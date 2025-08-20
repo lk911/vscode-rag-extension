@@ -20,10 +20,6 @@
         "title": "Hello World"
       },
       {
-        "command": "cursorathome.parseCurrentFile",
-        "title": "parseCurrentFile"
-      },
-      {
         "command": "cursorathome.showinputbox",
         "title": "showinputbox"
       }

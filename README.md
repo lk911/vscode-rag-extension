@@ -60,7 +60,7 @@ The extension automatically handles all required dependencies:
    - Select the built `.vsix` file from the `dist` folder
 
 ## Usage
-
+For best results, use descriptive naming conventions in your code
 
 
 

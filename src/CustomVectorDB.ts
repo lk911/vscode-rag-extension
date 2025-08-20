@@ -18,6 +18,9 @@ export class VectorDataBase{
             this.resize();
         }
     }
+    delete(id:number){
+        this.index?.markDelete(id);
+    }
     resize(){
         if (this.dimensions) {
             let id = 0;

@@ -37,8 +37,6 @@ export async function getEmbedding(text: string): Promise<number[]> {
         normalize: true,
     });
 
-    // Extract the data from the Tensor object and convert it to a number array.
-    // The `data` property is a Float32Array.
     const embeddingVector = Array.from(output.data) as number[];
     
     return embeddingVector;
