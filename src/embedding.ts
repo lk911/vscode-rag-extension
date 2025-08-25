@@ -8,6 +8,7 @@ env.backends.onnx = ort;
 env.allowRemoteModels = true;
 
 import { pipeline } from '@xenova/transformers';
+
 let extractor: any = null;
 // This function loads the model only once.
 export async function initializeEmbeddingModel() {

@@ -5,8 +5,9 @@ import { Parser, Language,Query } from 'web-tree-sitter';
 import { initializeEmbeddingModel,getEmbedding } from './embedding';
 import { CodeChunk } from './codeChunk';
 import { VectorDataBase } from './CustomVectorDB';
+import { SearchKnnResult } from './searchKnnType';
 let parser: Parser | undefined;
-// const loadedLanguages: Map<string,Language> = new Map();
+const chunkMap: Map<number,CodeChunk> = new Map();
 const languageQueries: {[key: string]: Query } = {};
 const filePathIds: {[key:string]:number[]} = {};
 const languageMap: { [key: string]: string } = {
@@ -67,7 +68,7 @@ export const testPrompts: string[] = [
   "How are products seeded with initial data?",
   "How does the code ensure product IDs are unique?"
 ];
-const chunkMap: Map<number,CodeChunk> = new Map();
+
 let chunkId = 0;
 //jinaai/jina-embeddings-v2-base-code embeds with 768 dimensions
 const vectorDb = new VectorDataBase(768);
@@ -179,9 +180,11 @@ async function listFiles(uri: vscode.Uri,parser: Parser,context: vscode.Extensio
 					query = new Query(loadLang,queryString);
 					languageQueries[doc.languageId]= query;
 				}
-				const chunks =await CreateTree(parser,query,fileText,doc);
+				const chunks:CodeChunk[]|undefined =await CreateTree(parser,query,fileText,doc);
 				if(chunks){
-				EmbedAndStore(chunks);}
+					setChunkMap(chunks);
+					filePathIdIndex(chunks,doc);
+					EmbedAndStore(chunks);}
 				else{
 					console.error("chunking failed")
 				}
@@ -236,23 +239,23 @@ async function CreateTree(parserparam: Parser,query:Query,fileText:string,docume
 			});
 			// console.log(chunkId);
 			// console.log(chunkContent);
-			chunkMap.set(chunkId,{
-				id: chunkId,
-				type: chunkType,
-				name: name,
-				content: chunkContent,
-				startLine: node.startPosition.row,
-				endLine: node.endPosition.row,
-				startByte: node.startIndex,
-				endByte: node.endIndex,
-				filePath: document.uri.fsPath,
-				languageId: langId
-			});
-			if(!filePathIds[document.uri.fsPath]){
-				filePathIds[document.uri.fsPath]= [];
-			}
-			console.log(chunkId);
-			filePathIds[document.uri.fsPath].push(chunkId);
+			// chunkMap.set(chunkId,{
+			// 	id: chunkId,
+			// 	type: chunkType,
+			// 	name: name,
+			// 	content: chunkContent,
+			// 	startLine: node.startPosition.row,
+			// 	endLine: node.endPosition.row,
+			// 	startByte: node.startIndex,
+			// 	endByte: node.endIndex,
+			// 	filePath: document.uri.fsPath,
+			// 	languageId: langId
+			// });
+			// if(!filePathIds[document.uri.fsPath]){
+			// 	filePathIds[document.uri.fsPath]= [];
+			// }
+			// console.log(chunkId);
+			// filePathIds[document.uri.fsPath].push(chunkId);
 			chunkId++;
 		}
 		console.log(`Found ${chunks.length} chunks:`, chunks);
@@ -262,7 +265,36 @@ async function CreateTree(parserparam: Parser,query:Query,fileText:string,docume
 		console.error('Parsing failed: tree object is null.');
 		return undefined;
 	}
-	
+}
+function filePathIdIndex(chunks:CodeChunk[],document: vscode.TextDocument){
+	if(!filePathIds[document.uri.fsPath]){
+		filePathIds[document.uri.fsPath]= [];
+	}
+	for(const chunk of chunks){
+		console.log(chunk.id);
+		filePathIds[document.uri.fsPath].push(chunk.id);
+	}
+}
+function setChunkMap(chunks:CodeChunk[]){
+	if(filePathIds[chunks[0].filePath]){
+		for(const oldId of filePathIds[chunks[0].filePath]){
+			chunkMap.delete(oldId)
+		}
+	}
+	for(const chunk of chunks){
+		chunkMap.set(chunk.id,{
+			id: chunk.id,
+			type: chunk.type,
+			name: chunk.name,
+			content: chunk.content,
+			startLine: chunk.startLine,
+			endLine: chunk.endLine,
+			startByte: chunk.startByte,
+			endByte: chunk.endByte,
+			filePath: chunk.filePath,
+			languageId: chunk.languageId
+		});
+	}
 }
 async function EmbedAndStore(chunks:CodeChunk[]){
 	let vectors: Float32Array[] = [];
@@ -287,10 +319,11 @@ async function EmbedAndStore(chunks:CodeChunk[]){
 async function embedPrompts(){
 	const promptVectors: Float32Array[] =[]
 	for(const prompt of testPrompts){
-		console.log(prompt);
+		//console.log(prompt);
 		const embedding = await getEmbedding(prompt);
 		promptVectors.push(new Float32Array(embedding));
-		console.log(promptVectors[promptVectors.length-1])
+		//console.log(promptVectors[promptVectors.length-1])
+		
 	}
 	testSearch(promptVectors);
 }
@@ -298,7 +331,19 @@ async function testSearch(promptVectors: Float32Array[]){
 	let curr = 0;
 	for(const prompt of promptVectors){
 		console.log("Prompt: ",testPrompts[curr]);
-		vectorDb.search(prompt,10);
+		const results:SearchKnnResult|undefined = await vectorDb.search(prompt,10);
+		if(results){
+			console.log("Relevant code:\n", );
+			for(const id of results.neighbors){
+				console.log(id);
+				if(chunkMap.has(id)){
+					//console.log((chunkMap.get(id))?.content);
+				}
+				else{
+					console.error("invalid id");
+				}
+			}
+		}
 		curr++;
 	}
 }
@@ -331,10 +376,8 @@ async function updateIndex(doc: vscode.TextDocument,parser:Parser,context: vscod
 					vectorDb.delete(id);
 				}
 			}
-			filePathIds[chunks[0].filePath] = [];
-			for(const chunk of chunks){
-				filePathIds[chunks[0].filePath].push(chunk.id);
-			}
+			setChunkMap(chunks);
+			filePathIdIndex(chunks,doc);
 			EmbedAndStore(chunks);
 		}
 		else{

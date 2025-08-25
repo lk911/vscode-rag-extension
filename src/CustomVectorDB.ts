@@ -1,4 +1,5 @@
 import { HierarchicalNSW } from "hnswlib-node";
+import { SearchKnnResult } from './searchKnnType';
 export class VectorDataBase{
     index : HierarchicalNSW | undefined
     savedVectors: Float32Array[]=[];
@@ -33,12 +34,21 @@ export class VectorDataBase{
             this.index = newIndex;
         }    
     }
-    search(queryVector:Float32Array,k:number){
+    async search(queryVector:Float32Array,k:number): Promise<SearchKnnResult|undefined>{
         const result = this.index?.searchKnn(Array.from(queryVector),k);
         if (result) {
+            const resultData:SearchKnnResult = {
+                distances: result?.distances,
+                neighbors:result?.neighbors
+            }
             console.log('Labels:', result.neighbors);
             console.log('Distances:', result.distances);
+            return {
+                distances: result?.distances,
+                neighbors:result?.neighbors
+            };
         }
+        else{return undefined};
     }
 }
 
