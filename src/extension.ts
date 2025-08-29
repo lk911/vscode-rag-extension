@@ -6,6 +6,7 @@ import { initializeEmbeddingModel,getEmbedding } from './embedding';
 import { CodeChunk } from './codeChunk';
 import { VectorDataBase } from './CustomVectorDB';
 import { SearchKnnResult } from './searchKnnType';
+import { webcrypto } from 'crypto';
 let parser: Parser | undefined;
 const chunkMap: Map<number,CodeChunk> = new Map();
 const languageQueries: {[key: string]: Query } = {};
@@ -40,11 +41,11 @@ const treeSitterQueries:{ [key: string]: string } = {
   'go': 'go.scm',
   'swift': 'swift.scm',
   'rust': 'rust.scm',
-  'ruby': 'ruby.scm',
-  'html': 'html.scm',//file needed still
-  'css': 'css.scm',//file needed still
-  'bash': 'bash.scm',//file needed still
-  'json': 'json.scm' //file needed still
+  'ruby': 'ruby.scm'
+//   'html': 'html.scm',//file needed still
+//   'css': 'css.scm',//file needed still
+//   'bash': 'bash.scm',//file needed still
+//   'json': 'json.scm' //file needed still
 };
 export const testPrompts: string[] = [
   "How do I add a new product to the catalog?",
@@ -78,7 +79,6 @@ const vectorDb = new VectorDataBase(768);
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('Extension "cursorathome" is starting activation...');
 	try{
-		const wasmUri = vscode.Uri.joinPath(context.extensionUri, 'parsers', 'tree-sitter.wasm');
 		try{
 			await initializeEmbeddingModel();
 			console.log("embedding model loaded");
@@ -103,6 +103,8 @@ export async function activate(context: vscode.ExtensionContext) {
 				vscode.workspace.onDidSaveTextDocument(async (document: vscode.TextDocument) => {
 					if (document.languageId === 'typescript' || document.languageId === 'javascript') {
 						//await handleFileUpdate(document);
+						console.log("filepaths:",filePathIds);
+						console.log("chunkmap:",chunkMap);
 						if(parser){
 						await updateIndex(document,parser,context);}
 					}
@@ -113,10 +115,43 @@ export async function activate(context: vscode.ExtensionContext) {
 							vscode.window.showInformationMessage(`You entered: ${value}`);
 						}
 					});
-				})
+				});
+				let currentPanel: vscode.WebviewPanel | undefined = undefined;
+				const webView = vscode.commands.registerCommand('cursorathome.openwebview',() => {
+					const columnToShowIn = vscode.window.activeTextEditor
+						? vscode.window.activeTextEditor.viewColumn
+						: undefined;
+
+					if (currentPanel) {
+						// If we already have a panel, show it in the target column
+						currentPanel.reveal(columnToShowIn);
+					} else {
+						// Otherwise, create a new panel
+						currentPanel = vscode.window.createWebviewPanel(
+						'Chat',
+						'Chat',
+						columnToShowIn || vscode.ViewColumn.One,
+						{
+							enableScripts: true,
+							retainContextWhenHidden: true
+						}
+						);
+						currentPanel.webview.html = getWebviewContent();
+
+						// Reset when the current panel is closed
+						currentPanel.onDidDispose(
+						() => {
+							currentPanel = undefined;
+						},
+						null,
+						context.subscriptions
+						);
+					}
+				});
 				context.subscriptions.push(disposable);
 				context.subscriptions.push(inputBox);
-			}
+				context.subscriptions.push(webView);
+			}	
 			catch(e){
 				console.error("Error setting up parser language:",e);
 			}
@@ -132,6 +167,47 @@ export async function activate(context: vscode.ExtensionContext) {
 
 // This method is called when your extension is deactivated
 export function deactivate() {}
+function getWebviewContent(){
+	  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt Window</title>
+</head>
+<body>
+  <form id="messageForm">
+    <label for="message">Your Message:</label><br>
+    <textarea id="message" name="message" rows="5" cols="40" placeholder="Type your message here..."></textarea><br><br>
+    <button type="submit">Send</button>
+  </form>
+
+  <div id="chat"></div>
+
+  <script>
+    const form = document.getElementById("messageForm");
+    const textarea = document.getElementById("message");
+    const chat = document.getElementById("chat");
+
+    form.addEventListener("submit", function(event) {
+      event.preventDefault(); // ❌ stop the page from refreshing
+
+      // Get message
+      const msg = textarea.value.trim();
+      if (msg !== "") {
+        // Add it to the chat box
+        const p = document.createElement("p");
+        p.textContent = msg;
+        chat.appendChild(p);
+
+        // Clear textarea
+        textarea.value = "";
+      }
+    });
+  </script>
+</body>
+</html>`;
+}
 async function indexProject(parser: Parser,context: vscode.ExtensionContext){
 	const folders = vscode.workspace.workspaceFolders;
 	if (!folders) {
@@ -267,14 +343,13 @@ async function CreateTree(parserparam: Parser,query:Query,fileText:string,docume
 	}
 }
 function filePathIdIndex(chunks:CodeChunk[],document: vscode.TextDocument){
-	if(!filePathIds[document.uri.fsPath]){
-		filePathIds[document.uri.fsPath]= [];
-	}
+	filePathIds[document.uri.fsPath]= [];
 	for(const chunk of chunks){
-		console.log(chunk.id);
+		console.log("indexing id to path ",chunk.id);
 		filePathIds[document.uri.fsPath].push(chunk.id);
 	}
 }
+
 function setChunkMap(chunks:CodeChunk[]){
 	if(filePathIds[chunks[0].filePath]){
 		for(const oldId of filePathIds[chunks[0].filePath]){
@@ -371,7 +446,7 @@ async function updateIndex(doc: vscode.TextDocument,parser:Parser,context: vscod
 		if(chunks){
 			if(filePathIds[chunks[0].filePath]){
 				for(const id of filePathIds[chunks[0].filePath]){
-					console.log("hello1");
+					console.log("deleting id:");
 					console.log(id);
 					vectorDb.delete(id);
 				}

@@ -22,6 +22,10 @@
       {
         "command": "cursorathome.showinputbox",
         "title": "showinputbox"
+      },
+      {
+        "command": "cursorathome.openwebview",
+        "title": "openwebview"
       }
     ]
   },
