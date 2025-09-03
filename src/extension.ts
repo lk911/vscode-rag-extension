@@ -6,8 +6,10 @@ import { initializeEmbeddingModel,getEmbedding } from './embedding';
 import { CodeChunk } from './codeChunk';
 import { VectorDataBase } from './CustomVectorDB';
 import { SearchKnnResult } from './searchKnnType';
-import { webcrypto } from 'crypto';
+import OpenAI from "openai";
+
 let parser: Parser | undefined;
+
 const chunkMap: Map<number,CodeChunk> = new Map();
 const languageQueries: {[key: string]: Query } = {};
 const filePathIds: {[key:string]:number[]} = {};
@@ -73,9 +75,8 @@ export const testPrompts: string[] = [
 let chunkId = 0;
 //jinaai/jina-embeddings-v2-base-code embeds with 768 dimensions
 const vectorDb = new VectorDataBase(768);
+let llamaServerURL:string|undefined;
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('Extension "cursorathome" is starting activation...');
 	try{
@@ -116,6 +117,9 @@ export async function activate(context: vscode.ExtensionContext) {
 						}
 					});
 				});
+				const testPrompt = vscode.commands.registerCommand('cursorathome.testprompt',()=> {
+
+				});
 				let currentPanel: vscode.WebviewPanel | undefined = undefined;
 				const webView = vscode.commands.registerCommand('cursorathome.openwebview',() => {
 					const columnToShowIn = vscode.window.activeTextEditor
@@ -125,6 +129,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					if (currentPanel) {
 						// If we already have a panel, show it in the target column
 						currentPanel.reveal(columnToShowIn);
+						
 					} else {
 						// Otherwise, create a new panel
 						currentPanel = vscode.window.createWebviewPanel(
@@ -137,6 +142,49 @@ export async function activate(context: vscode.ExtensionContext) {
 						}
 						);
 						currentPanel.webview.html = getWebviewContent();
+						currentPanel.webview.onDidReceiveMessage(async (
+							msg: {type: string; payload?:any}	
+						)=>{
+							if(msg.type === 'userPrompt'){
+								const userText:string = msg.payload;
+								console.log(userText);
+								if(!llamaServerURL){
+									console.warn("provide server URL before prompting")
+								}
+								else{
+									const client = new OpenAI({
+										apiKey: "not-needed",
+										baseURL: llamaServerURL
+									});
+									const response = await createPrompt(userText,client);
+									if (response){
+										if (currentPanel) {
+											currentPanel.webview.postMessage({
+											type: 'response',
+											payload: { responseText: response}
+											});
+										}
+										else{
+											console.error("panel is undefined");
+										}
+									}
+									else{
+										console.error("no response received");
+									}
+								}
+							}
+							else if(msg.type === 'setServerUrl'){
+								llamaServerURL = msg.payload;
+								console.log("Server URL Set!")
+								
+							}
+							else{
+								console.error('unknown message type');
+							}
+						},
+						undefined,
+						context.subscriptions
+						)
 
 						// Reset when the current panel is closed
 						currentPanel.onDidDispose(
@@ -151,6 +199,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				context.subscriptions.push(disposable);
 				context.subscriptions.push(inputBox);
 				context.subscriptions.push(webView);
+				context.subscriptions.push(testPrompt);
 			}	
 			catch(e){
 				console.error("Error setting up parser language:",e);
@@ -176,34 +225,74 @@ function getWebviewContent(){
     <title>Prompt Window</title>
 </head>
 <body>
-  <form id="messageForm">
-    <label for="message">Your Message:</label><br>
-    <textarea id="message" name="message" rows="5" cols="40" placeholder="Type your message here..."></textarea><br><br>
-    <button type="submit">Send</button>
-  </form>
+  <div class="row">
+	<div>
+		<form id="messageForm">
+		<label for="message">Your Prompt:</label><br>
+		<textarea id="promptInput" name="prompt" rows="5" cols="40" placeholder="Type your Prompt here..."></textarea><br><br>
+		<button type="submit" data-action="send">Send</button>
+		</form>
+  	</div>
+	<div>
+		<form id="serverURLForm">
+		<label for="serverUrlInput">Your server URL:</label><br>
+		<textarea id="serverUrlInput" name="serverUrl" rows="2" cols="20" placeholder="Enter Llama URL here..."></textarea><br><br>
+		<button type="submit" data-action="enter">enter</button>
+		</form>
+  	</div>
+  </div>
+	<style>
+	.row {
+		display: flex;       /* lays children left→right */
+		align-items: center;
+		gap: 8px;
+	}
+	</style>
+
 
   <div id="chat"></div>
 
   <script>
-    const form = document.getElementById("messageForm");
-    const textarea = document.getElementById("message");
+  	const vscode = acquireVsCodeApi();
+    const messageForm    = document.getElementById("messageForm");
+    const serverURLForm  = document.getElementById("serverURLForm");
+    const promptInput    = document.getElementById("promptInput");
+    const serverUrlInput = document.getElementById("serverUrlInput");
     const chat = document.getElementById("chat");
+	
 
-    form.addEventListener("submit", function(event) {
-      event.preventDefault(); // ❌ stop the page from refreshing
+    messageForm.addEventListener("submit", function(event) {
+      event.preventDefault(); 
+		const msg = promptInput.value.trim();
+		if (!msg) return;
+		if (msg !== "") {
+			// Add it to the chat box
+			const p = document.createElement("p");
+			p.textContent = msg;
+			chat.appendChild(p);
 
-      // Get message
-      const msg = textarea.value.trim();
-      if (msg !== "") {
-        // Add it to the chat box
-        const p = document.createElement("p");
-        p.textContent = msg;
-        chat.appendChild(p);
+			vscode.postMessage({ type: "userPrompt", payload: msg });
 
-        // Clear textarea
-        textarea.value = "";
-      }
+			// Clear textarea
+			promptInput.value = "";
+		}
     });
+	serverURLForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const url = serverUrlInput.value.trim();
+      if (!url) return;
+
+      vscode.postMessage({ type: "setServerUrl", payload: url });
+      serverUrlInput.value = "";
+    });
+	window.addEventListener("message",(event) => {
+		const msg = event.data;
+		if (msg.type === "response") {
+			const r = document.createElement("r");
+			r.textContent = msg;
+			chat.appendChild(r);
+		}
+	});
   </script>
 </body>
 </html>`;
@@ -222,6 +311,38 @@ async function indexProject(parser: Parser,context: vscode.ExtensionContext){
 			await listFiles(folder.uri,parser,context);
 		}
 	}
+}
+async function createPrompt(userPrompt:string,client:OpenAI){
+	const searchResults:SearchKnnResult|undefined = await basicSearch(userPrompt);
+	let code: string = "";
+	if (searchResults) {
+		for (const id of searchResults?.distances){
+			const respectiveChunk:CodeChunk|undefined = chunkMap.get(id);
+			if (respectiveChunk) {
+				code = "relevant chunk:\n" + respectiveChunk.content;
+			}
+		}
+	}
+	const resp = await client.chat.completions.create({
+		model: "local-llm", 
+		temperature: 0.2,                    
+		top_p: 0.9,
+		max_tokens: 400,
+		messages: [
+			{ role: "system", content:  `
+			You are a senior code assistant.
+			Rules:
+			- Prefer correct, minimal code over prose. Keep answers short.
+			- If writing new code, return exactly one fenced block with the right language and optional filename hint, e.g. \`\`\`ts filename: src/foo.ts
+			- Never invent APIs. If information is missing, reply with: NEEDS_INFO:<question>.
+			- When showing commands, assume Linux/WSL. When showing Node code, use ESM and TypeScript-friendly patterns.
+			- For performance-sensitive code, explain tradeoffs briefly at the end under "Notes:" (≤3 bullets).
+			` },
+			{ role: "user", content: 'releveant code chunks:\n'+code+"\nPrompt:\n"+userPrompt }
+		],
+	});
+	console.log(resp);
+	return resp;
 }
 async function listFiles(uri: vscode.Uri,parser: Parser,context: vscode.ExtensionContext) {
     const entries = await vscode.workspace.fs.readDirectory(uri);
@@ -313,25 +434,6 @@ async function CreateTree(parserparam: Parser,query:Query,fileText:string,docume
 				filePath: document.uri.fsPath,
 				languageId: langId
 			});
-			// console.log(chunkId);
-			// console.log(chunkContent);
-			// chunkMap.set(chunkId,{
-			// 	id: chunkId,
-			// 	type: chunkType,
-			// 	name: name,
-			// 	content: chunkContent,
-			// 	startLine: node.startPosition.row,
-			// 	endLine: node.endPosition.row,
-			// 	startByte: node.startIndex,
-			// 	endByte: node.endIndex,
-			// 	filePath: document.uri.fsPath,
-			// 	languageId: langId
-			// });
-			// if(!filePathIds[document.uri.fsPath]){
-			// 	filePathIds[document.uri.fsPath]= [];
-			// }
-			// console.log(chunkId);
-			// filePathIds[document.uri.fsPath].push(chunkId);
 			chunkId++;
 		}
 		console.log(`Found ${chunks.length} chunks:`, chunks);
@@ -391,16 +493,22 @@ async function EmbedAndStore(chunks:CodeChunk[]){
 	}
 	embedPrompts();
 }
-async function embedPrompts(){
-	const promptVectors: Float32Array[] =[]
-	for(const prompt of testPrompts){
-		//console.log(prompt);
+async function embedPrompts(prompt?:string){
+	if(prompt){
 		const embedding = await getEmbedding(prompt);
-		promptVectors.push(new Float32Array(embedding));
-		//console.log(promptVectors[promptVectors.length-1])
-		
+		const promptVectors: Float32Array = new Float32Array(embedding);
+		return promptVectors;
 	}
-	testSearch(promptVectors);
+	else{
+		const promptVectors: Float32Array[] =[]
+		for(const prompt of testPrompts){
+			//console.log(prompt);
+			const embedding = await getEmbedding(prompt);
+			promptVectors.push(new Float32Array(embedding));
+			//console.log(promptVectors[promptVectors.length-1])
+			
+		}
+		testSearch(promptVectors);}
 }
 async function testSearch(promptVectors: Float32Array[]){
 	let curr = 0;
@@ -420,6 +528,17 @@ async function testSearch(promptVectors: Float32Array[]){
 			}
 		}
 		curr++;
+	}
+}
+async function basicSearch(prompt:string){
+	const embeddedPrompt = await embedPrompts(prompt);
+	if(embeddedPrompt){
+		const results:SearchKnnResult|undefined = await vectorDb.search(embeddedPrompt,10);
+		return results;
+	}
+	else{
+		console.error("no embedding produced");
+		return;
 	}
 }
 //update index when save occurs
