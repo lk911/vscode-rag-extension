@@ -1,6 +1,5 @@
-# CursorAtHome
 
-A powerful VS Code extension that provides **RAG (Retrieval-Augmented Generation) capabilities** for code assistance using **local LLMs** and **self-hosted infrastructure**. Like Cursor and Copilot but completely free, open source, and running on your own machine.
+A powerful VS Code extension that provides **RAG (Retrieval-Augmented Generation) capabilities** for code assistance using **local LLMs** or other provider. Like Cursor and Copilot but completely free, open source, and running on your own machine.
 
 ## Features
 
@@ -27,7 +26,7 @@ A powerful VS Code extension that provides **RAG (Retrieval-Augmented Generation
 ## Requirements
 
 ### **System Requirements**
-- Sufficient RAM for local AI models (recommended: 8GB+)
+- Sufficient RAM for local AI models (recommended: 8GB+) if hosting own server
 
 ### **Dependencies**
 The extension automatically handles all required dependencies:
@@ -39,10 +38,6 @@ The extension automatically handles all required dependencies:
 ## Installation
 
 1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/yourusername/cursorathome.git
-   cd cursorathome
-   ```
 
 2. **Install dependencies**:
    ```bash
