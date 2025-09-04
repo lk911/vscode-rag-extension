@@ -76,6 +76,8 @@ let chunkId = 0;
 //jinaai/jina-embeddings-v2-base-code embeds with 768 dimensions
 const vectorDb = new VectorDataBase(768);
 let llamaServerURL:string|undefined;
+let optionalApiKey:string|undefined;
+let model:string = "Placeholder name";
 
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('Extension "cursorathome" is starting activation...');
@@ -153,10 +155,10 @@ export async function activate(context: vscode.ExtensionContext) {
 								}
 								else{
 									const client = new OpenAI({
-										apiKey: "not-needed",
+										apiKey: optionalApiKey,
 										baseURL: llamaServerURL
 									});
-									const response = await createPrompt(userText,client);
+									const response = await createPrompt(userText,client,model);
 									if (response){
 										if (currentPanel) {
 											currentPanel.webview.postMessage({
@@ -175,8 +177,19 @@ export async function activate(context: vscode.ExtensionContext) {
 							}
 							else if(msg.type === 'setServerUrl'){
 								llamaServerURL = msg.payload;
-								console.log("Server URL Set!")
+								console.log(llamaServerURL);
+								console.log("Server URL Set!");
 								
+							}
+							else if(msg.type ==='setApiKey'){
+								optionalApiKey = msg.payload;
+								console.log(optionalApiKey);
+								console.log("api key set!");
+							}
+							else if(msg.type === 'setModel'){
+								model = msg.payload;
+								console.log(model);
+								console.log("model name set!");
 							}
 							else{
 								console.error('unknown message type');
@@ -185,8 +198,6 @@ export async function activate(context: vscode.ExtensionContext) {
 						undefined,
 						context.subscriptions
 						)
-
-						// Reset when the current panel is closed
 						currentPanel.onDidDispose(
 						() => {
 							currentPanel = undefined;
@@ -240,6 +251,20 @@ function getWebviewContent(){
 		<button type="submit" data-action="enter">enter</button>
 		</form>
   	</div>
+	<div>
+		<form id="apiKeyForm">
+		<label for="apiKeyInput">Your api key(optional):</label><br>
+		<textarea id="apiKeyInput" name="apikey" rows="2" cols="20" placeholder="Enter API key here..."></textarea><br><br>
+		<button type="submit" data-action="enter2">enter</button>
+		</form>
+  	</div>
+	<div>
+		<form id="modelForm">
+		<label for="modelInput">Model Name:</label><br>
+		<textarea id="modelInput" name="model" rows="2" cols="20" placeholder="Enter model name here..."></textarea><br><br>
+		<button type="submit" data-action="enter3">enter</button>
+		</form>
+  	</div>
   </div>
 	<style>
 	.row {
@@ -256,6 +281,10 @@ function getWebviewContent(){
   	const vscode = acquireVsCodeApi();
     const messageForm    = document.getElementById("messageForm");
     const serverURLForm  = document.getElementById("serverURLForm");
+	const apiKeyForm = document.getElementById("apiKeyForm");
+	const apiKeyInput  = document.getElementById("apiKeyInput");
+	const modelForm = document.getElementById("modelForm");
+	const modelInput  = document.getElementById("modelInput");
     const promptInput    = document.getElementById("promptInput");
     const serverUrlInput = document.getElementById("serverUrlInput");
     const chat = document.getElementById("chat");
@@ -285,6 +314,22 @@ function getWebviewContent(){
       vscode.postMessage({ type: "setServerUrl", payload: url });
       serverUrlInput.value = "";
     });
+	apiKeyForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const key = apiKeyInput.value.trim();
+      if (!key) return;
+
+      vscode.postMessage({ type: "setApiKey", payload: key });
+      apiKeyInput.value = "";
+    });
+	modelForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const model = modelInput.value.trim();
+      if (!model) return;
+
+      vscode.postMessage({ type: "setModel", payload: model });
+      modelInput.value = "";
+    });
 	window.addEventListener("message",(event) => {
 		const msg = event.data;
 		if (msg.type === "response") {
@@ -312,7 +357,7 @@ async function indexProject(parser: Parser,context: vscode.ExtensionContext){
 		}
 	}
 }
-async function createPrompt(userPrompt:string,client:OpenAI){
+async function createPrompt(userPrompt:string,client:OpenAI,modelName:string){
 	const searchResults:SearchKnnResult|undefined = await basicSearch(userPrompt);
 	let code: string = "";
 	if (searchResults) {
@@ -323,25 +368,24 @@ async function createPrompt(userPrompt:string,client:OpenAI){
 			}
 		}
 	}
+	console.log("code:",code);
 	const resp = await client.chat.completions.create({
-		model: "local-llm", 
+		model: modelName, 
 		temperature: 0.2,                    
 		top_p: 0.9,
 		max_tokens: 400,
 		messages: [
 			{ role: "system", content:  `
-			You are a senior code assistant.
+			You are a senior code assistant. usually code chunks will be automatically provided in the promtps
 			Rules:
 			- Prefer correct, minimal code over prose. Keep answers short.
-			- If writing new code, return exactly one fenced block with the right language and optional filename hint, e.g. \`\`\`ts filename: src/foo.ts
 			- Never invent APIs. If information is missing, reply with: NEEDS_INFO:<question>.
-			- When showing commands, assume Linux/WSL. When showing Node code, use ESM and TypeScript-friendly patterns.
 			- For performance-sensitive code, explain tradeoffs briefly at the end under "Notes:" (≤3 bullets).
 			` },
 			{ role: "user", content: 'releveant code chunks:\n'+code+"\nPrompt:\n"+userPrompt }
 		],
 	});
-	console.log(resp);
+	console.log(resp.choices[0].message.content);
 	return resp;
 }
 async function listFiles(uri: vscode.Uri,parser: Parser,context: vscode.ExtensionContext) {
